@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أداة دمج وتحليل ملفات أكسيل الذكية</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (XLSX) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font: Cairo -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+        }
+        .drag-active {
+            border-color: #3b82f6 !important;
+            background-color: #eff6ff !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Toast Notification Container -->
+    <div id="toast" class="fixed top-5 left-5 z-50 transform -translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+        <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400"></i>
+        <span id="toast-message"></span>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white shadow-lg py-6 px-6">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 text-2xl">
+                    <i class="fa-solid fa-file-excel text-emerald-400"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black tracking-wide">منصة دمج وتحليل إكسيل</h1>
+                    <p class="text-xs text-blue-200">ادمج ملفاتك، استخرج التقارير الإحصائية، وحمل النتائج بضغطة زر</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="resetApp()" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-semibold transition border border-white/20 flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-right"></i> إعادة ضبط
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-8 flex-1 w-full space-y-8">
+
+        <!-- Step 1: Upload Section -->
+        <section id="upload-section" class="bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
+            <div class="max-w-2xl mx-auto text-center space-y-4">
+                <div class="inline-flex p-4 rounded-3xl bg-blue-50 text-blue-600 text-3xl mb-2">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                </div>
+                <h2 class="text-xl font-bold">قم برفع ملفات الإكسيل (Excel / CSV)</h2>
+                <p class="text-sm text-slate-500">اختر عدة ملفات أو اسحبها وافلتها هنا. سيتم دمجها تلقائياً بناءً على الأعمدة المتطابقة.</p>
+                
+                <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-3xl p-8 transition hover:border-blue-500 cursor-pointer bg-slate-50/50">
+                    <input type="file" id="file-input" multiple accept=".xlsx, .xls, .csv" class="hidden">
+                    <label for="file-input" class="cursor-pointer flex flex-col items-center justify-center gap-2">
+                        <span class="text-slate-600 font-semibold">اضغط لاختيار الملفات أو اسحبها هنا</span>
+                        <span class="text-xs text-slate-400">تدعم صيغ .xlsx, .xls, .csv</span>
+                    </label>
+                </div>
+
+                <!-- Uploaded Files List -->
+                <div id="file-list-container" class="hidden text-right space-y-3 mt-6">
+                    <h3 class="font-bold text-sm text-slate-700 flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-blue-600"></i> الملفات المضافة (<span id="file-count">0</span>):
+                    </h3>
+                    <div id="file-list" class="max-h-48 overflow-y-auto space-y-2 pr-1"></div>
+
+                    <div class="pt-4 flex justify-end">
+                        <button onclick="processFiles()" id="merge-btn" class="w-full sm:w-auto px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-lg shadow-blue-500/30 transition flex items-center justify-center gap-3">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> بدء الدمج والتحليل الذكي
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading Spinner State -->
+        <section id="loading-section" class="hidden py-16 text-center space-y-4">
+            <div class="inline-block w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-slate-600 font-bold text-lg" id="loading-text">جاري معالجة الملفات ودمج البيانات...</p>
+        </section>
+
+        <!-- Step 2: Dashboard & Results Section -->
+        <section id="results-section" class="hidden space-y-8">
+            
+            <!-- Quick Stats Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl font-bold">
+                        <i class="fa-solid fa-file-lines"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-400 font-semibold">إجمالي الملفات المدمجة</p>
+                        <h4 class="text-2xl font-black text-slate-800" id="stat-files">0</h4>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl font-bold">
+                        <i class="fa-solid fa-table-cells-row"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-400 font-semibold">إجمالي الصفوف (Records)</p>
+                        <h4 class="text-2xl font-black text-slate-800" id="stat-rows">0</h4>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-2xl font-bold">
+                        <i class="fa-solid fa-columns"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-400 font-semibold">إجمالي الأعمدة (Columns)</p>
+                        <h4 class="text-2xl font-black text-slate-800" id="stat-cols">0</h4>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl font-bold">
+                        <i class="fa-solid fa-chart-pie"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-400 font-semibold">الأعمدة الرقمية المحللة</p>
+                        <h4 class="text-2xl font-black text-slate-800" id="stat-numeric">0</h4>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Download Action Bar -->
+            <div class="bg-gradient-to-r from-slate-900 to-indigo-950 p-6 rounded-3xl text-white flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+                <div>
+                    <h3 class="text-lg font-bold">جاهز للتنزيل!</h3>
+                    <p class="text-xs text-slate-300">يمكنك الآن تحميل الملف المجمع بصيغة Excel أو تقرير التحليل الإحصائي المفصل.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                    <button onclick="downloadMergedExcel()" class="flex-1 md:flex-none px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30">
+                        <i class="fa-solid fa-file-arrow-down"></i> تحميل الملف المجمع (.xlsx)
+                    </button>
+                    <button onclick="downloadAnalysisReport()" class="flex-1 md:flex-none px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30">
+                        <i class="fa-solid fa-file-pdf"></i> تحميل تقرير التحليل (.html/txt)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabs Navigation -->
+            <div class="flex border-b border-slate-200 gap-6">
+                <button onclick="switchTab('report')" id="tab-btn-report" class="pb-3 font-bold border-b-2 border-blue-600 text-blue-600 transition flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line"></i> تقرير التحليل والذكاء الإحصائي
+                </button>
+                <button onclick="switchTab('preview')" id="tab-btn-preview" class="pb-3 font-semibold text-slate-400 hover:text-slate-600 transition flex items-center gap-2">
+                    <i class="fa-solid fa-table"></i> معاينة الجدول المجمع
+                </button>
+            </div>
+
+            <!-- Tab Content 1: Analytics Report -->
+            <div id="tab-report" class="space-y-8">
+                
+                <!-- AI & Analytical Insights Box -->
+                <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+                    <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-brain text-indigo-600"></i> ملخص التحليل المتقدم
+                    </h3>
+                    <div id="ai-insights-content" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-column text-blue-600"></i> تحليل المجاميع (حسب الأعمدة الرقمية والفئوية)
+                        </h3>
+                        <div class="relative h-72">
+                            <canvas id="barChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-pie text-indigo-600"></i> توزع القيم (Top Categories)
+                        </h3>
+                        <div class="relative h-72 flex items-center justify-center">
+                            <canvas id="pieChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistical Summary Table -->
+                <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+                    <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-calculator text-emerald-600"></i> الإحصائيات الوصفية للأعمدة الرقمية
+                    </h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-sm">
+                            <thead class="bg-slate-100 text-slate-700 font-bold">
+                                <tr>
+                                    <th class="p-3 rounded-r-xl">اسم العمود</th>
+                                    <th class="p-3">المجموع (Sum)</th>
+                                    <th class="p-3">المتوسط (Average)</th>
+                                    <th class="p-3">الأعلى (Max)</th>
+                                    <th class="p-3 rounded-l-xl">الأقل (Min)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-table-body" class="divide-y divide-slate-100 text-slate-600">
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Tab Content 2: Table Preview -->
+            <div id="tab-preview" class="hidden bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-table text-blue-600"></i> عينة من البيانات المدمجة (أول 50 صف)
+                    </h3>
+                    <span class="text-xs text-slate-400 font-semibold bg-slate-100 px-3 py-1.5 rounded-xl">معاينة فقط</span>
+                </div>
+                <div class="overflow-x-auto max-h-[500px] border border-slate-100 rounded-2xl">
+                    <table class="w-full text-right text-sm border-collapse">
+                        <thead id="preview-thead" class="bg-slate-900 text-white sticky top-0">
+                            <!-- Headers -->
+                        </thead>
+                        <tbody id="preview-tbody" class="divide-y divide-slate-100 text-slate-600">
+                            <!-- Rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto py-6 text-center text-xs text-slate-400 border-t border-slate-200 bg-white">
+        <p>جميع حقوق الدمج والمعالجة تتم محلياً داخل المتصفح لضمان أقصى درجات الخصوصية والأمان.</p>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        let uploadedFiles = [];
+        let mergedData = [];
+        let allHeaders = [];
+        let numericColumns = [];
+        let categoricalColumns = [];
+        let statsSummary = {};
+        let chartsInstance = { bar: null, pie: null };
+
+        // DOM Elements
+        const fileInput = document.getElementById('file-input');
+        const dropZone = document.getElementById('drop-zone');
+        const fileListContainer = document.getElementById('file-list-container');
+        const fileList = document.getElementById('file-list');
+        const fileCountSpan = document.getElementById('file-count');
+        const uploadSection = document.getElementById('upload-section');
+        const loadingSection = document.getElementById('loading-section');
+        const resultsSection = document.getElementById('results-section');
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toast-message');
+
+        // Toast notification helper
+        function showToast(message, type = 'success') {
+            toastMessage.textContent = message;
+            const icon = document.getElementById('toast-icon');
+            if (type === 'success') {
+                icon.className = "fa-solid fa-circle-check text-emerald-400 text-lg";
+            } else {
+                icon.className = "fa-solid fa-circle-exclamation text-amber-400 text-lg";
+            }
+            toast.classList.remove('-translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('-translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+
+        // Drag and Drop Events
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drag-active');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-active');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            for (let i = 0; i < files.length; i++) {
+                uploadedFiles.push(files[i]);
+            }
+            renderFileList();
+        }
+
+        function removeFile(index) {
+            uploadedFiles.splice(index, 1);
+            renderFileList();
+        }
+
+        function renderFileList() {
+            if (uploadedFiles.length > 0) {
+                fileListContainer.classList.remove('hidden');
+                fileCountSpan.textContent = uploadedFiles.length;
+                fileList.innerHTML = '';
+                uploadedFiles.forEach((file, index) => {
+                    const div = document.createElement('div');
+                    div.className = "flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm";
+                    div.innerHTML = `
+                        <div class="flex items-center gap-3 truncate">
+                            <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                            <span class="font-semibold text-slate-700 truncate">${file.name}</span>
+                            <span class="text-xs text-slate-400">(${(file.size / 1024).toFixed(1)} KB)</span>
+                        </div>
+                        <button onclick="removeFile(${index})" class="text-rose-500 hover:text-rose-700 p-1 transition">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    `;
+                    fileList.appendChild(div);
+                });
+            } else {
+                fileListContainer.classList.add('hidden');
+            }
+        }
+
+        function resetApp() {
+            uploadedFiles = [];
+            mergedData = [];
+            allHeaders = [];
+            fileInput.value = '';
+            fileListContainer.classList.add('hidden');
+            resultsSection.classList.add('hidden');
+            uploadSection.classList.remove('hidden');
+            if (chartsInstance.bar) chartsInstance.bar.destroy();
+            if (chartsInstance.pie) chartsInstance.pie.destroy();
+            showToast("تم إعادة ضبط التطبيق بنجاح", "success");
+        }
+
+        // Core Processing & Merging Engine
+        async function processFiles() {
+            if (uploadedFiles.length === 0) {
+                showToast("الرجاء اختيار ملف واحد على الأقل", "error");
+                return;
+            }
+
+            uploadSection.classList.add('hidden');
+            loadingSection.classList.remove('hidden');
+
+            try {
+                let combinedRows = [];
+                let headerSet = new Set();
+                let fileCountProcessed = 0;
+
+                for (let file of uploadedFiles) {
+                    const data = await readFileAsArrayBuffer(file);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    // Read first sheet of each workbook
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+                    if (jsonRows.length > 0) {
+                        // Collect headers
+                        Object.keys(jsonRows[0]).forEach(h => headerSet.add(h));
+                        
+                        // Add source file tag to each row
+                        jsonRows.forEach(row => {
+                            row["مصدر_الملف"] = file.name;
+                            combinedRows.push(row);
+                        });
+                        fileCountProcessed++;
+                    }
+                }
+
+                headerSet.add("مصدر_الملف");
+                allHeaders = Array.from(headerSet);
+                mergedData = combinedRows;
+
+                // Normalize rows so all have consistent keys
+                mergedData = mergedData.map(row => {
+                    let normalized = {};
+                    allHeaders.forEach(h => {
+                        normalized[h] = row[h] !== undefined ? row[h] : "";
+                    });
+                    return normalized;
+                });
+
+                // Run Analysis
+                analyzeData();
+
+                // Render UI
+                setTimeout(() => {
+                    loadingSection.classList.add('hidden');
+                    resultsSection.classList.remove('hidden');
+                    
+                    document.getElementById('stat-files').textContent = fileCountProcessed;
+                    document.getElementById('stat-rows').textContent = mergedData.length.toLocaleString();
+                    document.getElementById('stat-cols').textContent = allHeaders.length;
+                    document.getElementById('stat-numeric').textContent = numericColumns.length;
+
+                    renderPreviewTable();
+                    renderStatsTable();
+                    renderCharts();
+                    renderInsights();
+
+                    showToast("تم دمج وتحليل الملفات بنجاح!", "success");
+                }, 600);
+
+            } catch (error) {
+                console.error(error);
+                loadingSection.classList.add('hidden');
+                uploadSection.classList.remove('hidden');
+                showToast("حدث خطأ أثناء معالجة الملفات. تأكد من صحة التنسيق.", "error");
+            }
+        }
+
+        function readFileAsArrayBuffer(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(e);
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // Data Analysis Engine
+        function analyzeData() {
+            numericColumns = [];
+            categoricalColumns = [];
+            statsSummary = {};
+
+            if (mergedData.length === 0) return;
+
+            const sampleRow = mergedData[0];
+            allHeaders.forEach(header => {
+                if (header === "مصدر_الملف") return;
+
+                let isNumeric = true;
+                let sum = 0;
+                let max = -Infinity;
+                let min = Infinity;
+                let countNum = 0;
+                let valueCounts = {};
+
+                mergedData.forEach(row => {
+                    let val = row[header];
+                    if (val !== "" && val !== null && !isNaN(Number(val))) {
+                        let num = Number(val);
+                        sum += num;
+                        if (num > max) max = num;
+                        if (num < min) min = num;
+                        countNum++;
+                    } else {
+                        isNumeric = false;
+                    }
+
+                    // Categorical tracking
+                    let catVal = String(val).trim();
+                    if (catVal) {
+                        valueCounts[catVal] = (valueCounts[catVal] || 0) + 1;
+                    }
+                });
+
+                if (countNum > mergedData.length * 0.4 && countNum > 0) {
+                    numericColumns.push(header);
+                    statsSummary[header] = {
+                        type: 'numeric',
+                        sum: sum,
+                        avg: sum / countNum,
+                        max: max === -Infinity ? 0 : max,
+                        min: min === Infinity ? 0 : min,
+                        count: countNum
+                    };
+                } else {
+                    categoricalColumns.push({
+                        header: header,
+                        counts: valueCounts
+                    });
+                }
+            });
+        }
+
+        // Render Preview Table
+        function renderPreviewTable() {
+            const thead = document.getElementById('preview-thead');
+            const tbody = document.getElementById('preview-tbody');
+
+            let headerHTML = '<tr>';
+            allHeaders.forEach(h => {
+                headerHTML += `<th class="p-3 text-nowrap">${h}</th>`;
+            });
+            headerHTML += '</tr>';
+            thead.innerHTML = headerHTML;
+
+            let bodyHTML = '';
+            const previewRows = mergedData.slice(0, 50);
+            previewRows.forEach(row => {
+                bodyHTML += '<tr class="hover:bg-slate-50 transition">';
+                allHeaders.forEach(h => {
+                    bodyHTML += `<td class="p-3 text-nowrap">${row[h]}</td>`;
+                });
+                bodyHTML += '</tr>';
+            });
+            tbody.innerHTML = bodyHTML;
+        }
+
+        // Render Statistical Summary Table
+        function renderStatsTable() {
+            const tbody = document.getElementById('stats-table-body');
+            let html = '';
+            for (let col of numericColumns) {
+                let stat = statsSummary[col];
+                html += `
+                    <tr>
+                        <td class="p-3 font-semibold text-slate-800">${col}</td>
+                        <td class="p-3 font-mono">${stat.sum.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                        <td class="p-3 font-mono">${stat.avg.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                        <td class="p-3 font-mono text-emerald-600">${stat.max.toLocaleString()}</td>
+                        <td class="p-3 font-mono text-rose-600">${stat.min.toLocaleString()}</td>
+                    </tr>
+                `;
+            }
+            if (numericColumns.length === 0) {
+                html = `<tr><td colspan="5" class="p-4 text-center text-slate-400">لا توجد أعمدة ذات طابع رقمي لتحليلها.</td></tr>`;
+            }
+            tbody.innerHTML = html;
+        }
+
+        // Render AI & Statistical Insights
+        function renderInsights() {
+            const container = document.getElementById('ai-insights-content');
+            let html = `
+                <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-start gap-3">
+                    <i class="fa-solid fa-circle-info text-blue-600 text-lg mt-1"></i>
+                    <div>
+                        <h4 class="font-bold text-blue-900 mb-1">حجم البيانات الكلي</h4>
+                        <p class="text-xs text-blue-800">تم دمج ${uploadedFiles.length} ملف بنجاح ليبلغ إجمالي السجلات ${mergedData.length.toLocaleString()} سجل موزعة على ${allHeaders.length} عمود رئيسي.</p>
+                    </div>
+                </div>
+                <div class="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-start gap-3">
+                    <i class="fa-solid fa-chart-line text-emerald-600 text-lg mt-1"></i>
+                    <div>
+                        <h4 class="font-bold text-emerald-900 mb-1">الأعمدة الرقمية المكتشفة</h4>
+                        <p class="text-xs text-emerald-800">تم رصد ${numericColumns.length} عمود رقمي وحساب المجاميع والمتوسطات والقيم العظمى والصغرى لهم بدقة عالية.</p>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        // Render Charts using Chart.js
+        function renderCharts() {
+            // Bar Chart: Numeric columns sums
+            const barCtx = document.getElementById('barChart').getContext('2d');
+            if (chartsInstance.bar) chartsInstance.bar.destroy();
+
+            let barLabels = numericColumns.slice(0, 6);
+            let barData = barLabels.map(col => statsSummary[col].sum);
+
+            chartsInstance.bar = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: barLabels,
+                    datasets: [{
+                        label: 'مجموع القيم',
+                        data: barData,
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 12
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { grid: { color: '#f1f5f9' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            // Pie Chart: Top Categorical distribution
+            const pieCtx = document.getElementById('pieChart').getContext('2d');
+            if (chartsInstance.pie) chartsInstance.pie.destroy();
+
+            let pieLabels = [];
+            let pieValues = [];
+
+            if (categoricalColumns.length > 0) {
+                let firstCat = categoricalColumns[0];
+                let sortedEntries = Object.entries(firstCat.counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                pieLabels = sortedEntries.map(e => e[0]);
+                pieValues = sortedEntries.map(e => e[1]);
+            } else {
+                pieLabels = ['لا توجد تصنيفات'];
+                pieValues = [1];
+            }
+
+            chartsInstance.pie = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: pieLabels,
+                    datasets: [{
+                        data: pieValues,
+                        backgroundColor: ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { font: { family: 'Cairo' } } }
+                    }
+                }
+            });
+        }
+
+        // Tab Switcher
+        function switchTab(tabName) {
+            const reportTab = document.getElementById('tab-report');
+            const previewTab = document.getElementById('tab-preview');
+            const btnReport = document.getElementById('tab-btn-report');
+            const btnPreview = document.getElementById('tab-btn-preview');
+
+            if (tabName === 'report') {
+                reportTab.classList.remove('hidden');
+                previewTab.classList.add('hidden');
+                btnReport.className = "pb-3 font-bold border-b-2 border-blue-600 text-blue-600 transition flex items-center gap-2";
+                btnPreview.className = "pb-3 font-semibold text-slate-400 hover:text-slate-600 transition flex items-center gap-2";
+            } else {
+                reportTab.classList.add('hidden');
+                previewTab.classList.remove('hidden');
+                btnPreview.className = "pb-3 font-bold border-b-2 border-blue-600 text-blue-600 transition flex items-center gap-2";
+                btnReport.className = "pb-3 font-semibold text-slate-400 hover:text-slate-600 transition flex items-center gap-2";
+            }
+        }
+
+        // Download Merged Excel
+        function downloadMergedExcel() {
+            if (mergedData.length === 0) return;
+            const worksheet = XLSX.utils.json_to_sheet(mergedData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "البيانات المدمجة");
+            XLSX.writeFile(workbook, "Merged_Data_Report.xlsx");
+            showToast("تم تنزيل ملف الإكسيل المجمع بنجاح", "success");
+        }
+
+        // Download Analysis Report
+        function downloadAnalysisReport() {
+            let reportContent = `
+========================================
+تقرير التحليل الإحصائي الشامل للبيانات المدمجة
+========================================
+تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')}
+عدد الملفات المدمجة: ${uploadedFiles.length}
+إجمالي عدد السجلات: ${mergedData.length}
+إجمالي الأعمدة: ${allHeaders.length}
+
+----------------------------------------
+1. الإحصائيات الوصفية للأعمدة الرقمية:
+----------------------------------------
+`;
+            for (let col of numericColumns) {
+                let stat = statsSummary[col];
+                reportContent += `• العمود: ${col}\n`;
+                reportContent += `  - المجموع: ${stat.sum.toLocaleString()}\n`;
+                reportContent += `  - المتوسط: ${stat.avg.toFixed(2)}\n`;
+                reportContent += `  - الأعلى: ${stat.max}\n`;
+                reportContent += `  - الأقل: ${stat.min}\n\n`;
+            }
+
+            reportContent += `----------------------------------------
+2. الأعمدة الفئوية المكتشفة:
+----------------------------------------\n`;
+            categoricalColumns.forEach(cat => {
+                reportContent += `• ${cat.header} (يحتوي على ${Object.keys(cat.counts).length} تصنيف فريد)\n`;
+            });
+
+            const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "Analysis_Report.txt";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showToast("تم تنزيل تقرير التحليل بنجاح", "success");
+        }
+    </script>
+</body>
+</html>
